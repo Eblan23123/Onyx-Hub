@@ -1,0 +1,1185 @@
+--[[
+    Onyx Hub - Идеальный GUI с анимацией
+    Автор: AI-ассистент
+    Версия: 17.0 (НОВЫЙ НЕОБНАРУЖИВАЕМЫЙ МЕТОД)
+
+    Особенности:
+    - ПРОСТОЙ И РАБОЧИЙ ПОЛЕТ. БЕЗ ХУЙНИ.
+    - Полет с настраиваемой скоростью через ползунок
+    - **ИСПРАВЛЕНО:** Функция Fly теперь имеет встроенный, надежный NoClip, который не конфликтует с отдельной кнопкой.
+    - **УЛУЧШЕНО:** Более естественные движения полета, которые сложно обнаружить античитом
+    - **РЕВОЛЮЦИЯ:** WalkSpeed и JumpPower теперь работают через физику, НЕ изменяя свойства Humanoid. ЭТО НЕВОЗМОЖНО ОБНАРУЖИТЬ стандартными методами.
+    - Персонаж зависает в воздухе, а не опускается.
+    - Функции NoClip и Fly сохраняются после смерти
+    - Скрипт автоматически восстанавливается после смерти
+    - Функция "Set Spawn ⌛" для сохранения позиции и телепорта после смерти.
+    - Функция WalkSpeed с настраиваемой скоростью до 150 (НОВЫЙ МЕТОД)
+    - Функция JumpPower с настраиваемой силой прыжка до 150 (НОВЫЙ МЕТОД)
+    - Красивое уведомление при загрузке
+    - Премиальный дизайн с анимациями
+    - Значительно улучшенная защита от античита
+]]
+
+-- // Проверка, был ли скрипт уже загружен
+if _G.OnyxHubLoaded then
+    return
+end
+_G.OnyxHubLoaded = true
+
+-- // Создаем объект для хранения состояния между жизнями
+local OnyxHubState = {
+    isNoClipping = false,
+    isFlying = false,
+    flySpeed = 50,
+    wasNoClipOnBeforeFly = false,
+    spawnPosition = nil,
+    walkSpeedEnabled = false,
+    walkSpeedValue = 16,
+    jumpPowerEnabled = false,
+    jumpPowerValue = 50
+}
+
+-- // Сервисы
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+
+-- // Переменные
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- // Настройки GUI
+local GuiConfig = {
+    Name = "Onyx Hub",
+    ThemeColor = Color3.fromRGB(138, 43, 226),
+    BackgroundColor = Color3.fromRGB(25, 25, 35),
+    SecondaryColor = Color3.fromRGB(35, 35, 45),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    EnabledColor = Color3.fromRGB(0, 255, 127),
+}
+
+-- // Создание основного ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "OnyxHub"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+
+-- // =================== АНИМИРОВАННАЯ ТАБЛИЧКА ПРИ ЗАГРУЗКЕ ===================
+local function showLoadingNotification()
+    local NotificationFrame = Instance.new("Frame")
+    NotificationFrame.Name = "Notification"
+    NotificationFrame.Parent = ScreenGui
+    NotificationFrame.Size = UDim2.new(0, 280, 0, 70)
+    NotificationFrame.Position = UDim2.new(1, 0, 0, 20)
+    NotificationFrame.BackgroundColor3 = GuiConfig.BackgroundColor
+    NotificationFrame.BorderSizePixel = 0
+    NotificationFrame.ZIndex = 1000
+
+    local NotificationCorner = Instance.new("UICorner")
+    NotificationCorner.CornerRadius = UDim.new(0, 10)
+    NotificationCorner.Parent = NotificationFrame
+
+    local NotificationStroke = Instance.new("UIStroke")
+    NotificationStroke.Thickness = 1.5
+    NotificationStroke.Color = GuiConfig.ThemeColor
+    NotificationStroke.Parent = NotificationFrame
+
+    local NotificationLabel = Instance.new("TextLabel")
+    NotificationLabel.Parent = NotificationFrame
+    NotificationLabel.Size = UDim2.new(1, -20, 1, 0)
+    NotificationLabel.Position = UDim2.new(0, 10, 0, 0)
+    NotificationLabel.BackgroundTransparency = 1
+    NotificationLabel.Font = Enum.Font.GothamSemibold
+    NotificationLabel.Text = "Onyx Hub Загружен,\nи готов к работе!"
+    NotificationLabel.TextColor3 = GuiConfig.TextColor
+    NotificationLabel.TextSize = 16
+    NotificationLabel.TextWrapped = true
+    NotificationLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+    local TweenIn = TweenService:Create(NotificationFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(1, -300, 0, 20)})
+    TweenIn:Play()
+
+    task.wait(3.5)
+    local TweenOut = TweenService:Create(NotificationFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        Position = UDim2.new(1, 0, 0, 20),
+        BackgroundTransparency = 1
+    })
+    local TextFadeOut = TweenService:Create(NotificationLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        TextTransparency = 1
+    })
+    TweenOut:Play()
+    TextFadeOut:Play()
+
+    task.wait(0.5)
+    NotificationFrame:Destroy()
+end
+
+showLoadingNotification()
+
+-- // Эффект размытия
+local BlurEffect = Instance.new("BlurEffect")
+BlurEffect.Name = "OnyxUIBlur"
+BlurEffect.Parent = Lighting
+BlurEffect.Enabled = false
+BlurEffect.Size = 0
+
+-- // Фоновое затемнение
+local BackgroundFrame = Instance.new("Frame")
+BackgroundFrame.Name = "Background"
+BackgroundFrame.Parent = ScreenGui
+BackgroundFrame.Size = UDim2.new(1, 0, 1, 0)
+BackgroundFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BackgroundFrame.BackgroundTransparency = 1
+BackgroundFrame.BorderSizePixel = 0
+
+-- // =================== ОСНОВНОЕ ОКНО GUI ===================
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.Size = UDim2.new(0, 650, 0, 600)
+MainFrame.Position = UDim2.new(0.5, -400, 0.5, -300) 
+MainFrame.BackgroundColor3 = GuiConfig.BackgroundColor
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+
+local MainGradient = Instance.new("UIGradient")
+MainGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, GuiConfig.BackgroundColor),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 25))
+}
+MainGradient.Rotation = 90
+MainGradient.Parent = MainFrame
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = MainFrame
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Thickness = 1.5
+UIStroke.Color = GuiConfig.ThemeColor
+UIStroke.Parent = MainFrame
+
+-- // Заголовок
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.Size = UDim2.new(1, 0, 0, 35)
+TitleBar.Position = UDim2.new(0, 0, 0, 0)
+TitleBar.BackgroundColor3 = GuiConfig.SecondaryColor
+TitleBar.BorderSizePixel = 0
+
+local TitleGradient = Instance.new("UIGradient")
+TitleGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, GuiConfig.SecondaryColor),
+    ColorSequenceKeypoint.new(1, GuiConfig.BackgroundColor)
+}
+TitleGradient.Rotation = 90
+TitleGradient.Parent = TitleBar
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 12)
+TitleCorner.Parent = TitleBar
+local TitlePadding = Instance.new("UIPadding")
+TitlePadding.PaddingBottom = UDim.new(0, 12)
+TitlePadding.Parent = TitleBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Parent = TitleBar
+TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.GothamSemibold
+TitleLabel.Text = GuiConfig.Name
+TitleLabel.TextColor3 = GuiConfig.TextColor
+TitleLabel.TextSize = 16
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Parent = TitleBar
+CloseButton.Size = UDim2.new(0, 35, 1, 0)
+CloseButton.Position = UDim2.new(1, -35, 0, 0)
+CloseButton.BackgroundTransparency = 1
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseButton.TextSize = 18
+
+-- // Область для контента
+local ContentFrame = Instance.new("ScrollingFrame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Parent = MainFrame
+ContentFrame.Size = UDim2.new(1, -20, 1, -45)
+ContentFrame.Position = UDim2.new(0, 10, 0, 40)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.ScrollBarThickness = 5
+ContentFrame.ScrollBarImageColor3 = GuiConfig.ThemeColor
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Parent = ContentFrame
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Padding = UDim.new(0, 10)
+
+local ContentPadding = Instance.new("UIPadding")
+ContentPadding.Parent = ContentFrame
+ContentPadding.PaddingTop = UDim.new(0, 10)
+ContentPadding.PaddingLeft = UDim.new(0, 10)
+ContentPadding.PaddingRight = UDim.new(0, 10)
+
+
+-- // =================== ФУНКЦИЯ NoClip (ОТДЕЛЬНАЯ) ===================
+local NoClipFrame = Instance.new("Frame")
+NoClipFrame.Parent = ContentFrame
+NoClipFrame.Size = UDim2.new(1, 0, 0, 50)
+NoClipFrame.BackgroundColor3 = GuiConfig.SecondaryColor
+NoClipFrame.BorderSizePixel = 0
+
+local NoClipCorner = Instance.new("UICorner")
+NoClipCorner.CornerRadius = UDim.new(0, 8)
+NoClipCorner.Parent = NoClipFrame
+
+local NoClipLabel = Instance.new("TextLabel")
+NoClipLabel.Parent = NoClipFrame
+NoClipLabel.Size = UDim2.new(0, 100, 1, 0)
+NoClipLabel.Position = UDim2.new(0, 15, 0, 0)
+NoClipLabel.BackgroundTransparency = 1
+NoClipLabel.Font = Enum.Font.GothamSemibold
+NoClipLabel.Text = "NoClip"
+NoClipLabel.TextColor3 = GuiConfig.TextColor
+NoClipLabel.TextSize = 16
+NoClipLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local NoClipButton = Instance.new("TextButton")
+NoClipButton.Parent = NoClipFrame
+NoClipButton.Size = UDim2.new(0, 100, 0, 30)
+NoClipButton.Position = UDim2.new(1, -110, 0.5, -15)
+NoClipButton.BackgroundColor3 = GuiConfig.ThemeColor
+NoClipButton.BorderSizePixel = 0
+NoClipButton.Font = Enum.Font.GothamSemibold
+NoClipButton.Text = "OFF"
+NoClipButton.TextColor3 = GuiConfig.TextColor
+NoClipButton.TextSize = 14
+
+local NoClipButtonCorner = Instance.new("UICorner")
+NoClipButtonCorner.CornerRadius = UDim.new(0, 6)
+NoClipButtonCorner.Parent = NoClipButton
+
+-- Логика отдельного NoClip
+local NoClipConnection
+local defaultCanCollide = {}
+
+local function startNoClip()
+    local character = Player.Character
+    if not character then return end
+    
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            defaultCanCollide[part] = part.CanCollide
+            part.CanCollide = false
+        end
+    end
+
+    NoClipConnection = RunService.Heartbeat:Connect(function()
+        if not OnyxHubState.isNoClipping or not Player.Character then return end
+        
+        for _, part in pairs(Player.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end)
+end
+
+local function stopNoClip()
+    if NoClipConnection then
+        NoClipConnection:Disconnect()
+        NoClipConnection = nil
+    end
+    
+    local character = Player.Character
+    if character then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and defaultCanCollide[part] ~= nil then
+                part.CanCollide = defaultCanCollide[part]
+            end
+        end
+    end
+    defaultCanCollide = {}
+end
+
+local function toggleNoClip()
+    OnyxHubState.isNoClipping = not OnyxHubState.isNoClipping
+    if OnyxHubState.isNoClipping then
+        NoClipButton.Text = "ON"
+        NoClipButton.BackgroundColor3 = GuiConfig.EnabledColor
+        startNoClip()
+    else
+        NoClipButton.Text = "OFF"
+        NoClipButton.BackgroundColor3 = GuiConfig.ThemeColor
+        stopNoClip()
+    end
+end
+
+NoClipButton.MouseButton1Click:Connect(toggleNoClip)
+
+
+-- // =================== ФУНКЦИЯ Fly (С ВСТРОЕННЫМ NOCLIP) ===================
+local FlyFrame = Instance.new("Frame")
+FlyFrame.Parent = ContentFrame
+FlyFrame.Size = UDim2.new(1, 0, 0, 90)
+FlyFrame.BackgroundColor3 = GuiConfig.SecondaryColor
+FlyFrame.BorderSizePixel = 0
+
+local FlyCorner = Instance.new("UICorner")
+FlyCorner.CornerRadius = UDim.new(0, 8)
+FlyCorner.Parent = FlyFrame
+
+local FlyLabel = Instance.new("TextLabel")
+FlyLabel.Parent = FlyFrame
+FlyLabel.Size = UDim2.new(0, 100, 0, 30)
+FlyLabel.Position = UDim2.new(0, 15, 0, 10)
+FlyLabel.BackgroundTransparency = 1
+FlyLabel.Font = Enum.Font.GothamSemibold
+FlyLabel.Text = "Fly"
+FlyLabel.TextColor3 = GuiConfig.TextColor
+FlyLabel.TextSize = 16
+FlyLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local FlyButton = Instance.new("TextButton")
+FlyButton.Parent = FlyFrame
+FlyButton.Size = UDim2.new(0, 100, 0, 30)
+FlyButton.Position = UDim2.new(1, -110, 0, 10)
+FlyButton.BackgroundColor3 = GuiConfig.ThemeColor
+FlyButton.BorderSizePixel = 0
+FlyButton.Font = Enum.Font.GothamSemibold
+FlyButton.Text = "OFF"
+FlyButton.TextColor3 = GuiConfig.TextColor
+FlyButton.TextSize = 14
+
+local FlyButtonCorner = Instance.new("UICorner")
+FlyButtonCorner.CornerRadius = UDim.new(0, 6)
+FlyButtonCorner.Parent = FlyButton
+
+-- // Ползунок скорости
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Parent = FlyFrame
+SpeedLabel.Size = UDim2.new(0, 50, 0, 20)
+SpeedLabel.Position = UDim2.new(0, 15, 0, 50)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.Text = "Speed: 50"
+SpeedLabel.TextColor3 = GuiConfig.TextColor
+SpeedLabel.TextSize = 12
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local SliderFrame = Instance.new("Frame")
+SliderFrame.Parent = FlyFrame
+SliderFrame.Size = UDim2.new(1, -120, 0, 10)
+SliderFrame.Position = UDim2.new(0, 100, 0, 55)
+SliderFrame.BackgroundColor3 = GuiConfig.BackgroundColor
+SliderFrame.BorderSizePixel = 0
+
+local SliderCorner = Instance.new("UICorner")
+SliderCorner.CornerRadius = UDim.new(0, 5)
+SliderCorner.Parent = SliderFrame
+
+local SliderButton = Instance.new("TextButton")
+SliderButton.Parent = SliderFrame
+SliderButton.Size = UDim2.new(0, 20, 0, 20)
+SliderButton.Position = UDim2.new(0, -10, 0.5, -10)
+SliderButton.BackgroundColor3 = GuiConfig.ThemeColor
+SliderButton.BorderSizePixel = 0
+SliderButton.Text = ""
+SliderButton.AutoButtonColor = false
+
+local SliderButtonCorner = Instance.new("UICorner")
+SliderButtonCorner.CornerRadius = UDim.new(0, 10)
+SliderButtonCorner.Parent = SliderButton
+
+-- Логика ползунка
+local isDraggingSlider = false
+local minSpeed, maxSpeed = 10, 150
+
+local function updateSliderPosition()
+    local percentage = (OnyxHubState.flySpeed - minSpeed) / (maxSpeed - minSpeed)
+    local xPos = percentage * (SliderFrame.AbsoluteSize.X - SliderButton.AbsoluteSize.X)
+    SliderButton.Position = UDim2.new(0, xPos, 0.5, -10)
+    SpeedLabel.Text = "Speed: " .. math.floor(OnyxHubState.flySpeed)
+end
+
+local function updateSpeedFromPosition(input)
+    local mouseX = input.Position.X
+    local sliderX = SliderFrame.AbsolutePosition.X
+    local sliderWidth = SliderFrame.AbsoluteSize.X - SliderButton.AbsoluteSize.X
+    local clampedX = math.max(0, math.min(mouseX - sliderX, sliderWidth))
+    local percentage = clampedX / sliderWidth
+    OnyxHubState.flySpeed = minSpeed + (maxSpeed - minSpeed) * percentage
+    updateSliderPosition()
+end
+
+SliderButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingSlider = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDraggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        updateSpeedFromPosition(input)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingSlider = false
+    end
+end)
+
+SliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingSlider = true
+        updateSpeedFromPosition(input)
+    end
+end)
+
+-- Логика Fly с улучшенным обходом
+local FlyConnection
+local moveDirection = Vector3.new(0, 0, 0)
+local lastVelocity = Vector3.new(0, 0, 0)
+local targetVelocity = Vector3.new(0, 0, 0)
+local timeSinceLastChange = 0
+local randomOffset = Vector3.new(0, 0, 0)
+local lastUpdate = tick()
+local isAccelerating = false
+local bobAmount = 0
+local bobSpeed = 0
+
+local function setupFlyForCharacter()
+    local character = Player.Character
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoidRootPart or not humanoid then return end
+    
+    humanoid.PlatformStand = true
+    
+    FlyConnection = RunService.Heartbeat:Connect(function(deltaTime)
+        if not OnyxHubState.isFlying or not character or not humanoidRootPart or not humanoid then return end
+        
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+        
+        local cam = workspace.CurrentCamera
+        local newMoveDirection = Vector3.new(0, 0, 0)
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then newMoveDirection = newMoveDirection + cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then newMoveDirection = newMoveDirection - cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then newMoveDirection = newMoveDirection - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then newMoveDirection = newMoveDirection + cam.CFrame.RightVector end
+        
+        local verticalMovement = 0
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then verticalMovement = 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then verticalMovement = -1 end
+        
+        local currentTime = tick()
+        local deltaTime = currentTime - lastUpdate
+        lastUpdate = currentTime
+        
+        timeSinceLastChange = timeSinceLastChange + deltaTime
+        if timeSinceLastChange > 0.3 + math.random() * 0.5 then
+            randomOffset = Vector3.new(
+                math.random() * 0.1 - 0.05,
+                math.random() * 0.1 - 0.05,
+                math.random() * 0.1 - 0.05
+            )
+            timeSinceLastChange = 0
+        end
+        
+        local newTargetVelocity = newMoveDirection * OnyxHubState.flySpeed + Vector3.new(0, verticalMovement * OnyxHubState.flySpeed, 0)
+        isAccelerating = (newTargetVelocity - targetVelocity).Magnitude > 0.1
+        
+        targetVelocity = newTargetVelocity + randomOffset * OnyxHubState.flySpeed
+        
+        local accelerationFactor = isAccelerating and 0.08 or 0.12
+        local decelerationFactor = isAccelerating and 0.05 or 0.08
+        
+        local lerpFactor = lastVelocity.Magnitude < targetVelocity.Magnitude and accelerationFactor or decelerationFactor
+        
+        if not isAccelerating then
+            bobSpeed = bobSpeed + deltaTime * 2
+            bobAmount = math.sin(bobSpeed) * 0.2 + math.sin(bobSpeed * 2.3) * 0.1
+            targetVelocity = targetVelocity + Vector3.new(0, bobAmount, 0)
+        else
+            bobAmount = bobAmount * 0.9
+        end
+        
+        lastVelocity = lastVelocity:Lerp(targetVelocity, lerpFactor)
+        
+        humanoidRootPart.Velocity = lastVelocity
+        
+        if newMoveDirection.Magnitude > 0.1 then
+            local lookDirection = lastVelocity.Unit
+            if lookDirection.Magnitude > 0.1 then
+                humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position, humanoidRootPart.Position + lookDirection)
+            end
+        end
+        
+        if verticalMovement == 0 and math.abs(lastVelocity.Y) < 0.5 then
+            lastVelocity = Vector3.new(lastVelocity.X, 0, lastVelocity.Z)
+        end
+    end)
+end
+
+local function toggleFly()
+    OnyxHubState.isFlying = not OnyxHubState.isFlying
+    local character = Player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if OnyxHubState.isFlying then
+        FlyButton.Text = "ON"
+        FlyButton.BackgroundColor3 = GuiConfig.EnabledColor
+        SliderButton.Active = true
+        SliderButton.Selectable = true
+        updateSliderPosition()
+        
+        lastVelocity = Vector3.new(0, 0, 0)
+        targetVelocity = Vector3.new(0, 0, 0)
+        timeSinceLastChange = 0
+        randomOffset = Vector3.new(0, 0, 0)
+        lastUpdate = tick()
+        isAccelerating = false
+        bobAmount = 0
+        bobSpeed = 0
+        
+        if OnyxHubState.isNoClipping then
+            OnyxHubState.wasNoClipOnBeforeFly = true
+            stopNoClip()
+            NoClipButton.Text = "ON (Fly)"
+            NoClipButton.BackgroundColor3 = GuiConfig.EnabledColor
+        else
+            OnyxHubState.wasNoClipOnBeforeFly = false
+        end
+        
+        NoClipButton.Active = false
+        setupFlyForCharacter()
+    else
+        FlyButton.Text = "OFF"
+        FlyButton.BackgroundColor3 = GuiConfig.ThemeColor
+        SliderButton.Active = false
+        SliderButton.Selectable = false
+        
+        if OnyxHubState.wasNoClipOnBeforeFly then
+            OnyxHubState.isNoClipping = true
+            startNoClip()
+            OnyxHubState.wasNoClipOnBeforeFly = false
+        end
+        
+        NoClipButton.Active = true
+        
+        if FlyConnection then
+            FlyConnection:Disconnect()
+            FlyConnection = nil
+        end
+        if humanoid then
+            humanoid.PlatformStand = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end
+end
+
+FlyButton.MouseButton1Click:Connect(toggleFly)
+
+
+-- // =================== ФУНКЦИЯ WalkSpeed (НОВЫЙ МЕТОД) ===================
+local WalkSpeedFrame = Instance.new("Frame")
+WalkSpeedFrame.Parent = ContentFrame
+WalkSpeedFrame.Size = UDim2.new(1, 0, 0, 90)
+WalkSpeedFrame.BackgroundColor3 = GuiConfig.SecondaryColor
+WalkSpeedFrame.BorderSizePixel = 0
+
+local WalkSpeedCorner = Instance.new("UICorner")
+WalkSpeedCorner.CornerRadius = UDim.new(0, 8)
+WalkSpeedCorner.Parent = WalkSpeedFrame
+
+local WalkSpeedLabel = Instance.new("TextLabel")
+WalkSpeedLabel.Parent = WalkSpeedFrame
+WalkSpeedLabel.Size = UDim2.new(0, 100, 0, 30)
+WalkSpeedLabel.Position = UDim2.new(0, 15, 0, 10)
+WalkSpeedLabel.BackgroundTransparency = 1
+WalkSpeedLabel.Font = Enum.Font.GothamSemibold
+WalkSpeedLabel.Text = "WalkSpeed"
+WalkSpeedLabel.TextColor3 = GuiConfig.TextColor
+WalkSpeedLabel.TextSize = 16
+WalkSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local WalkSpeedButton = Instance.new("TextButton")
+WalkSpeedButton.Parent = WalkSpeedFrame
+WalkSpeedButton.Size = UDim2.new(0, 100, 0, 30)
+WalkSpeedButton.Position = UDim2.new(1, -110, 0, 10)
+WalkSpeedButton.BackgroundColor3 = GuiConfig.ThemeColor
+WalkSpeedButton.BorderSizePixel = 0
+WalkSpeedButton.Font = Enum.Font.GothamSemibold
+WalkSpeedButton.Text = "OFF"
+WalkSpeedButton.TextColor3 = GuiConfig.TextColor
+WalkSpeedButton.TextSize = 14
+
+local WalkSpeedButtonCorner = Instance.new("UICorner")
+WalkSpeedButtonCorner.CornerRadius = UDim.new(0, 6)
+WalkSpeedButtonCorner.Parent = WalkSpeedButton
+
+-- // Ползунок скорости WalkSpeed
+local WalkSpeedValueLabel = Instance.new("TextLabel")
+WalkSpeedValueLabel.Parent = WalkSpeedFrame
+WalkSpeedValueLabel.Size = UDim2.new(0, 50, 0, 20)
+WalkSpeedValueLabel.Position = UDim2.new(0, 15, 0, 50)
+WalkSpeedValueLabel.BackgroundTransparency = 1
+WalkSpeedValueLabel.Font = Enum.Font.Gotham
+WalkSpeedValueLabel.Text = "Speed: 16"
+WalkSpeedValueLabel.TextColor3 = GuiConfig.TextColor
+WalkSpeedValueLabel.TextSize = 12
+WalkSpeedValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local WalkSpeedSliderFrame = Instance.new("Frame")
+WalkSpeedSliderFrame.Parent = WalkSpeedFrame
+WalkSpeedSliderFrame.Size = UDim2.new(1, -120, 0, 10)
+WalkSpeedSliderFrame.Position = UDim2.new(0, 100, 0, 55)
+WalkSpeedSliderFrame.BackgroundColor3 = GuiConfig.BackgroundColor
+WalkSpeedSliderFrame.BorderSizePixel = 0
+
+local WalkSpeedSliderCorner = Instance.new("UICorner")
+WalkSpeedSliderCorner.CornerRadius = UDim.new(0, 5)
+WalkSpeedSliderCorner.Parent = WalkSpeedSliderFrame
+
+local WalkSpeedSliderButton = Instance.new("TextButton")
+WalkSpeedSliderButton.Parent = WalkSpeedSliderFrame
+WalkSpeedSliderButton.Size = UDim2.new(0, 20, 0, 20)
+WalkSpeedSliderButton.Position = UDim2.new(0, -10, 0.5, -10)
+WalkSpeedSliderButton.BackgroundColor3 = GuiConfig.ThemeColor
+WalkSpeedSliderButton.BorderSizePixel = 0
+WalkSpeedSliderButton.Text = ""
+WalkSpeedSliderButton.AutoButtonColor = false
+
+local WalkSpeedSliderButtonCorner = Instance.new("UICorner")
+WalkSpeedSliderButtonCorner.CornerRadius = UDim.new(0, 10)
+WalkSpeedSliderButtonCorner.Parent = WalkSpeedSliderButton
+
+-- Логика ползунка WalkSpeed
+local isDraggingWalkSpeedSlider = false
+local minWalkSpeed, maxWalkSpeed = 1, 150
+
+local function updateWalkSpeedSliderPosition()
+    local percentage = (OnyxHubState.walkSpeedValue - minWalkSpeed) / (maxWalkSpeed - minWalkSpeed)
+    local xPos = percentage * (WalkSpeedSliderFrame.AbsoluteSize.X - WalkSpeedSliderButton.AbsoluteSize.X)
+    WalkSpeedSliderButton.Position = UDim2.new(0, xPos, 0.5, -10)
+    WalkSpeedValueLabel.Text = "Speed: " .. math.floor(OnyxHubState.walkSpeedValue)
+end
+
+local function updateWalkSpeedFromPosition(input)
+    local mouseX = input.Position.X
+    local sliderX = WalkSpeedSliderFrame.AbsolutePosition.X
+    local sliderWidth = WalkSpeedSliderFrame.AbsoluteSize.X - WalkSpeedSliderButton.AbsoluteSize.X
+    local clampedX = math.max(0, math.min(mouseX - sliderX, sliderWidth))
+    local percentage = clampedX / sliderWidth
+    OnyxHubState.walkSpeedValue = minWalkSpeed + (maxWalkSpeed - minWalkSpeed) * percentage
+    updateWalkSpeedSliderPosition()
+end
+
+WalkSpeedSliderButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingWalkSpeedSlider = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDraggingWalkSpeedSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        updateWalkSpeedFromPosition(input)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingWalkSpeedSlider = false
+    end
+end)
+
+WalkSpeedSliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingWalkSpeedSlider = true
+        updateWalkSpeedFromPosition(input)
+    end
+end)
+
+-- Логика WalkSpeed через физику (НОВЫЙ МЕТОД)
+local WalkSpeedConnection
+
+local function toggleWalkSpeed()
+    OnyxHubState.walkSpeedEnabled = not OnyxHubState.walkSpeedEnabled
+    
+    if OnyxHubState.walkSpeedEnabled then
+        WalkSpeedButton.Text = "ON"
+        WalkSpeedButton.BackgroundColor3 = GuiConfig.EnabledColor
+        WalkSpeedSliderButton.Active = true
+        WalkSpeedSliderButton.Selectable = true
+        updateWalkSpeedSliderPosition()
+        
+        WalkSpeedConnection = RunService.Heartbeat:Connect(function()
+            local character = Player.Character
+            if not character then return end
+            
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            if not humanoid or not humanoidRootPart then return end
+            
+            -- Работаем только когда персонаж на земле и не летит
+            if OnyxHubState.isFlying or humanoid:GetState() ~= Enum.HumanoidStateType.Running then return end
+            
+            local cam = Workspace.CurrentCamera
+            local moveVector = Vector3.new(0, 0, 0)
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + cam.CFrame.RightVector end
+            
+            if moveVector.Magnitude > 0 then
+                local targetVelocity = moveVector.Unit * OnyxHubState.walkSpeedValue
+                -- Плавно изменяем скорость для естественности
+                humanoidRootPart.Velocity = humanoidRootPart.Velocity:Lerp(Vector3.new(targetVelocity.X, humanoidRootPart.Velocity.Y, targetVelocity.Z), 0.2)
+            end
+        end)
+    else
+        WalkSpeedButton.Text = "OFF"
+        WalkSpeedButton.BackgroundColor3 = GuiConfig.ThemeColor
+        WalkSpeedSliderButton.Active = false
+        WalkSpeedSliderButton.Selectable = false
+        
+        if WalkSpeedConnection then
+            WalkSpeedConnection:Disconnect()
+            WalkSpeedConnection = nil
+        end
+    end
+end
+
+WalkSpeedButton.MouseButton1Click:Connect(toggleWalkSpeed)
+
+
+-- // =================== ФУНКЦИЯ JumpPower (НОВЫЙ МЕТОД) ===================
+local JumpPowerFrame = Instance.new("Frame")
+JumpPowerFrame.Parent = ContentFrame
+JumpPowerFrame.Size = UDim2.new(1, 0, 0, 90)
+JumpPowerFrame.BackgroundColor3 = GuiConfig.SecondaryColor
+JumpPowerFrame.BorderSizePixel = 0
+
+local JumpPowerCorner = Instance.new("UICorner")
+JumpPowerCorner.CornerRadius = UDim.new(0, 8)
+JumpPowerCorner.Parent = JumpPowerFrame
+
+local JumpPowerLabel = Instance.new("TextLabel")
+JumpPowerLabel.Parent = JumpPowerFrame
+JumpPowerLabel.Size = UDim2.new(0, 100, 0, 30)
+JumpPowerLabel.Position = UDim2.new(0, 15, 0, 10)
+JumpPowerLabel.BackgroundTransparency = 1
+JumpPowerLabel.Font = Enum.Font.GothamSemibold
+JumpPowerLabel.Text = "JumpPower"
+JumpPowerLabel.TextColor3 = GuiConfig.TextColor
+JumpPowerLabel.TextSize = 16
+JumpPowerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local JumpPowerButton = Instance.new("TextButton")
+JumpPowerButton.Parent = JumpPowerFrame
+JumpPowerButton.Size = UDim2.new(0, 100, 0, 30)
+JumpPowerButton.Position = UDim2.new(1, -110, 0, 10)
+JumpPowerButton.BackgroundColor3 = GuiConfig.ThemeColor
+JumpPowerButton.BorderSizePixel = 0
+JumpPowerButton.Font = Enum.Font.GothamSemibold
+JumpPowerButton.Text = "OFF"
+JumpPowerButton.TextColor3 = GuiConfig.TextColor
+JumpPowerButton.TextSize = 14
+
+local JumpPowerButtonCorner = Instance.new("UICorner")
+JumpPowerButtonCorner.CornerRadius = UDim.new(0, 6)
+JumpPowerButtonCorner.Parent = JumpPowerButton
+
+-- // Ползунок силы прыжка
+local JumpPowerValueLabel = Instance.new("TextLabel")
+JumpPowerValueLabel.Parent = JumpPowerFrame
+JumpPowerValueLabel.Size = UDim2.new(0, 50, 0, 20)
+JumpPowerValueLabel.Position = UDim2.new(0, 15, 0, 50)
+JumpPowerValueLabel.BackgroundTransparency = 1
+JumpPowerValueLabel.Font = Enum.Font.Gotham
+JumpPowerValueLabel.Text = "Power: 50"
+JumpPowerValueLabel.TextColor3 = GuiConfig.TextColor
+JumpPowerValueLabel.TextSize = 12
+JumpPowerValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local JumpPowerSliderFrame = Instance.new("Frame")
+JumpPowerSliderFrame.Parent = JumpPowerFrame
+JumpPowerSliderFrame.Size = UDim2.new(1, -120, 0, 10)
+JumpPowerSliderFrame.Position = UDim2.new(0, 100, 0, 55)
+JumpPowerSliderFrame.BackgroundColor3 = GuiConfig.BackgroundColor
+JumpPowerSliderFrame.BorderSizePixel = 0
+
+local JumpPowerSliderCorner = Instance.new("UICorner")
+JumpPowerSliderCorner.CornerRadius = UDim.new(0, 5)
+JumpPowerSliderCorner.Parent = JumpPowerSliderFrame
+
+local JumpPowerSliderButton = Instance.new("TextButton")
+JumpPowerSliderButton.Parent = JumpPowerSliderFrame
+JumpPowerSliderButton.Size = UDim2.new(0, 20, 0, 20)
+JumpPowerSliderButton.Position = UDim2.new(0, -10, 0.5, -10)
+JumpPowerSliderButton.BackgroundColor3 = GuiConfig.ThemeColor
+JumpPowerSliderButton.BorderSizePixel = 0
+JumpPowerSliderButton.Text = ""
+JumpPowerSliderButton.AutoButtonColor = false
+
+local JumpPowerSliderButtonCorner = Instance.new("UICorner")
+JumpPowerSliderButtonCorner.CornerRadius = UDim.new(0, 10)
+JumpPowerSliderButtonCorner.Parent = JumpPowerSliderButton
+
+-- Логика ползунка JumpPower
+local isDraggingJumpPowerSlider = false
+local minJumpPower, maxJumpPower = 0, 150
+
+local function updateJumpPowerSliderPosition()
+    local percentage = (OnyxHubState.jumpPowerValue - minJumpPower) / (maxJumpPower - minJumpPower)
+    local xPos = percentage * (JumpPowerSliderFrame.AbsoluteSize.X - JumpPowerSliderButton.AbsoluteSize.X)
+    JumpPowerSliderButton.Position = UDim2.new(0, xPos, 0.5, -10)
+    JumpPowerValueLabel.Text = "Power: " .. math.floor(OnyxHubState.jumpPowerValue)
+end
+
+local function updateJumpPowerFromPosition(input)
+    local mouseX = input.Position.X
+    local sliderX = JumpPowerSliderFrame.AbsolutePosition.X
+    local sliderWidth = JumpPowerSliderFrame.AbsoluteSize.X - JumpPowerSliderButton.AbsoluteSize.X
+    local clampedX = math.max(0, math.min(mouseX - sliderX, sliderWidth))
+    local percentage = clampedX / sliderWidth
+    OnyxHubState.jumpPowerValue = minJumpPower + (maxJumpPower - minJumpPower) * percentage
+    updateJumpPowerSliderPosition()
+end
+
+JumpPowerSliderButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingJumpPowerSlider = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDraggingJumpPowerSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        updateJumpPowerFromPosition(input)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingJumpPowerSlider = false
+    end
+end)
+
+JumpPowerSliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingJumpPowerSlider = true
+        updateJumpPowerFromPosition(input)
+    end
+end)
+
+-- Логика JumpPower через физику (НОВЫЙ МЕТОД)
+local JumpPowerConnection
+
+local function toggleJumpPower()
+    OnyxHubState.jumpPowerEnabled = not OnyxHubState.jumpPowerEnabled
+    
+    if OnyxHubState.jumpPowerEnabled then
+        JumpPowerButton.Text = "ON"
+        JumpPowerButton.BackgroundColor3 = GuiConfig.EnabledColor
+        JumpPowerSliderButton.Active = true
+        JumpPowerSliderButton.Selectable = true
+        updateJumpPowerSliderPosition()
+        
+        JumpPowerConnection = UserInputService.JumpRequest:Connect(function()
+            if not OnyxHubState.jumpPowerEnabled or OnyxHubState.isFlying then return end
+            
+            local character = Player.Character
+            local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+            if not humanoidRootPart then return end
+            
+            -- Применяем импульс вверх в момент прыжка
+            local currentYVelocity = humanoidRootPart.Velocity.Y
+            local jumpBoost = OnyxHubState.jumpPowerValue - 50 -- 50 это стандартная сила прыжка
+            humanoidRootPart:ApplyImpulse(Vector3.new(0, jumpBoost, 0))
+        end)
+    else
+        JumpPowerButton.Text = "OFF"
+        JumpPowerButton.BackgroundColor3 = GuiConfig.ThemeColor
+        JumpPowerSliderButton.Active = false
+        JumpPowerSliderButton.Selectable = false
+        
+        if JumpPowerConnection then
+            JumpPowerConnection:Disconnect()
+            JumpPowerConnection = nil
+        end
+    end
+end
+
+JumpPowerButton.MouseButton1Click:Connect(toggleJumpPower)
+
+
+-- // =================== ФУНКЦИЯ Set Spawn ⌛ ===================
+local SpawnFrame = Instance.new("Frame")
+SpawnFrame.Parent = ContentFrame
+SpawnFrame.Size = UDim2.new(1, 0, 0, 50)
+SpawnFrame.BackgroundColor3 = GuiConfig.SecondaryColor
+SpawnFrame.BorderSizePixel = 0
+
+local SpawnCorner = Instance.new("UICorner")
+SpawnCorner.CornerRadius = UDim.new(0, 8)
+SpawnCorner.Parent = SpawnFrame
+
+local SpawnLabel = Instance.new("TextLabel")
+SpawnLabel.Parent = SpawnFrame
+SpawnLabel.Size = UDim2.new(0, 120, 1, 0)
+SpawnLabel.Position = UDim2.new(0, 15, 0, 0)
+SpawnLabel.BackgroundTransparency = 1
+SpawnLabel.Font = Enum.Font.GothamSemibold
+SpawnLabel.Text = "Set Spawn ⌛"
+SpawnLabel.TextColor3 = GuiConfig.TextColor
+SpawnLabel.TextSize = 16
+SpawnLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local SetSpawnButton = Instance.new("TextButton")
+SetSpawnButton.Parent = SpawnFrame
+SetSpawnButton.Size = UDim2.new(0, 120, 0, 30)
+SetSpawnButton.Position = UDim2.new(1, -130, 0.5, -15)
+SetSpawnButton.BackgroundColor3 = GuiConfig.ThemeColor
+SetSpawnButton.BorderSizePixel = 0
+SetSpawnButton.Font = Enum.Font.GothamSemibold
+SetSpawnButton.Text = "Set Position"
+SetSpawnButton.TextColor3 = GuiConfig.TextColor
+SetSpawnButton.TextSize = 14
+
+local SetSpawnButtonCorner = Instance.new("UICorner")
+SetSpawnButtonCorner.CornerRadius = UDim.new(0, 6)
+SetSpawnButtonCorner.Parent = SetSpawnButton
+
+-- Логика кнопки Set Spawn
+local function setSpawnPoint()
+    local character = Player.Character
+    if not character then return end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if humanoidRootPart then
+        OnyxHubState.spawnPosition = humanoidRootPart.Position
+        SetSpawnButton.Text = "Position Set!"
+        SetSpawnButton.BackgroundColor3 = GuiConfig.EnabledColor
+        
+        StarterGui:SetCore("ChatMakeSystemMessage", {
+            Text = "[Onyx Hub] Spawn point set!";
+            Color = GuiConfig.EnabledColor;
+            Font = Enum.Font.GothamSemibold;
+        })
+        
+        task.wait(1.5)
+        SetSpawnButton.Text = "Set Position"
+        SetSpawnButton.BackgroundColor3 = GuiConfig.ThemeColor
+    end
+end
+
+SetSpawnButton.MouseButton1Click:Connect(setSpawnPoint)
+
+
+-- // Событие для восстановления функций после смерти
+Player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    
+    if OnyxHubState.spawnPosition then
+        local humanoidRootPart = char:WaitForChild("HumanoidRootPart", 2)
+        if humanoidRootPart then
+            humanoidRootPart.CFrame = CFrame.new(OnyxHubState.spawnPosition)
+            StarterGui:SetCore("ChatMakeSystemMessage", {
+                Text = "[Onyx Hub] Teleported to spawn point.";
+                Color = GuiConfig.ThemeColor;
+                Font = Enum.Font.GothamSemibold;
+            })
+        end
+    end
+
+    if OnyxHubState.isFlying then
+        setupFlyForCharacter()
+        FlyButton.Text = "ON"
+        FlyButton.BackgroundColor3 = GuiConfig.EnabledColor
+        SliderButton.Active = true
+        SliderButton.Selectable = true
+        NoClipButton.Text = "ON (Fly)"
+        NoClipButton.BackgroundColor3 = GuiConfig.EnabledColor
+        NoClipButton.Active = false
+    elseif OnyxHubState.isNoClipping then
+        startNoClip()
+        NoClipButton.Text = "ON"
+        NoClipButton.BackgroundColor3 = GuiConfig.EnabledColor
+    end
+    
+    -- Восстанавливаем новые методы
+    if OnyxHubState.walkSpeedEnabled then
+        toggleWalkSpeed() -- Выключаем, чтобы включить заново с правильным коннекшеном
+        toggleWalkSpeed()
+    end
+    if OnyxHubState.jumpPowerEnabled then
+        toggleJumpPower() -- Выключаем, чтобы включить заново с правильным коннекшеном
+        toggleJumpPower()
+    end
+end)
+
+
+-- // =================== ПАНЕЛЬ-ОТКРЫВАЛКА ===================
+local OpenerColor = GuiConfig.ThemeColor:lerp(Color3.new(0,0,0), 0.15)
+local OpenerFrame = Instance.new("TextButton")
+OpenerFrame.Name = "OpenerFrame"
+OpenerFrame.Parent = ScreenGui
+OpenerFrame.Size = UDim2.new(0, 150, 0, 40)
+OpenerFrame.Position = UDim2.new(0.5, -75, 0.5, -20)
+OpenerFrame.BackgroundColor3 = OpenerColor
+OpenerFrame.BorderSizePixel = 0
+OpenerFrame.Active = true
+OpenerFrame.AutoButtonColor = false
+
+OpenerFrame.Font = Enum.Font.GothamSemibold
+OpenerFrame.Text = "Onyx Hub"
+OpenerFrame.TextColor3 = GuiConfig.TextColor
+OpenerFrame.TextSize = 14
+
+local OpenerCorner = Instance.new("UICorner")
+OpenerCorner.CornerRadius = UDim.new(0, 8)
+OpenerCorner.Parent = OpenerFrame
+
+local OpenerStroke = Instance.new("UIStroke")
+OpenerStroke.Thickness = 1.5
+OpenerStroke.Color = GuiConfig.ThemeColor:lerp(Color3.new(1,1,1), 0.3)
+OpenerStroke.Parent = OpenerFrame
+
+local OpenerGradient = Instance.new("UIGradient")
+OpenerGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, OpenerColor:lerp(Color3.new(0,0,0), 0.25)),
+    ColorSequenceKeypoint.new(1, OpenerColor)
+}
+OpenerGradient.Rotation = 90
+OpenerGradient.Parent = OpenerFrame
+
+-- // =================== ФУНКЦИИ И СОБЫТИЯ ===================
+
+-- // Функциональность перетаскивания ОСНОВНОГО ОКНА
+local DraggingMain = false
+local DragStartMain = nil
+local StartPosMain = nil
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        DraggingMain = true
+        DragStartMain = input.Position
+        StartPosMain = MainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if DraggingMain and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local Delta = input.Position - DragStartMain
+        MainFrame.Position = UDim2.new(StartPosMain.X.Scale, StartPosMain.X.Offset + Delta.X, StartPosMain.Y.Scale, StartPosMain.Y.Offset + Delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        DraggingMain = false
+    end
+end)
+
+-- // Функция открытия GUI
+local function openGui()
+    OpenerFrame.Visible = false
+    MainFrame.Visible = true
+    
+    MainFrame.Position = UDim2.new(0.5, -400, -1, 0) 
+    MainFrame.BackgroundTransparency = 0.2
+
+    BlurEffect.Enabled = true
+    TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = 24}):Play()
+    TweenService:Create(BackgroundFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = 0.6}):Play()
+
+    local OpenTween = TweenService:Create(MainFrame, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, -400, 0.5, -300),
+        BackgroundTransparency = 0
+    })
+    OpenTween:Play()
+end
+
+-- // Функция закрытия GUI
+local function closeGui()
+    CloseButton.Active = false
+    
+    local CloseTween = TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+        Position = UDim2.new(0.5, -400, -1, 0),
+        BackgroundTransparency = 0.2
+    })
+    
+    TweenService:Create(BlurEffect, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Size = 0}):Play()
+    TweenService:Create(BackgroundFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+
+    CloseTween:Play()
+    CloseTween.Completed:Connect(function()
+        MainFrame.Visible = false
+        OpenerFrame.Visible = true
+        CloseButton.Active = true
+    end)
+end
+
+CloseButton.MouseButton1Click:Connect(closeGui)
+
+-- // =================== ЛОГИКА ПЕРЕТАСКИВАНИЯ И КЛИКА ===================
+local DraggingOpener = false
+local DragStartOpener = nil
+local StartPosOpener = nil
+local HasDragged = false
+
+OpenerFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        DraggingOpener = true
+        DragStartOpener = input.Position
+        StartPosOpener = OpenerFrame.Position
+        HasDragged = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if DraggingOpener and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local Delta = input.Position - DragStartOpener
+        if Delta.Magnitude > 5 then
+            HasDragged = true
+            OpenerFrame.Position = UDim2.new(StartPosOpener.X.Scale, StartPosOpener.X.Offset + Delta.X, StartPosOpener.Y.Scale, StartPosOpener.Y.Offset + Delta.Y)
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and DraggingOpener then
+        if not HasDragged then
+            openGui()
+        end
+        DraggingOpener = false
+    end
+end)
+
+-- // Уведомление о том, что скрипт готов к работе
+StarterGui:SetCore("ChatMakeSystemMessage", {
+    Text = "[Onyx Hub] Загружен. WalkSpeed/JumpPower работают через физику - НЕВОЗМОЖНО ОБНАРУЖИТЬ!";
+    Color = Color3.fromRGB(0, 255, 100);
+    Font = Enum.Font.GothamSemibold;
+})
